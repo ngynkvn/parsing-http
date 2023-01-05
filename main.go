@@ -2,6 +2,8 @@ package main
 
 import (
 	"bufio"
+	"errors"
+	"fmt"
 	. "http/kvn"
 	"net"
 
@@ -22,6 +24,16 @@ func businessLogic(r Request) (Response, error) {
 }
 
 func handleConnection(conn net.Conn) {
+	defer func() {
+		if r := recover(); r != nil {
+			err, ok := r.(error)
+			if ok {
+				WriteErrorResponse(conn, err)
+			} else {
+				WriteErrorResponse(conn, errors.New("an unknown error was encountered"))
+			}
+		}
+	}()
 	reader := bufio.NewScanner(bufio.NewReader(conn))
 	rql := Must(GetRequestLine(reader))
 	headers := Must(GetHeaders(reader))
@@ -46,4 +58,16 @@ func main() {
 		go handleConnection(conn)
 	}
 
+}
+
+func WriteErrorResponse(conn net.Conn, err error) {
+	conn.Write([]byte("HTTP/1.1 500 Internal Server Error\r\n"))
+	// Headers
+	conn.Write([]byte("Server: KvN/0.1\r\n"))
+	conn.Write([]byte("Content-Type: text/html\r\n"))
+	// Blank Line
+	conn.Write([]byte("\r\n"))
+	// Body
+	conn.Write([]byte(fmt.Sprintf("THERE WAS AN ERROR ENCOUNTERED: %s", err)))
+	conn.Close()
 }
